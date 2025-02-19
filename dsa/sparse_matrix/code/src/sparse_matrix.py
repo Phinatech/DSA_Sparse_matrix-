@@ -1,101 +1,83 @@
 class SparseMatrix:
-    def __init__(self, matrixFilePath=None, numRows=0, numCols=0):
-        """
-        Initialize a sparse matrix from a file or with given dimensions.
-        """
-        self.matrix = {}
-        self.rows = numRows
-        self.cols = numCols
-        
-        if matrixFilePath:
-            self.load_from_file(matrixFilePath)
+    _cache = {}  # Class-level cache for loaded matrices
 
-    def load_from_file(self, filePath):
-        """
-        Load a sparse matrix from a file.
-        """
+    def __init__(self, matrixFilePath=None, numRows=None, numCols=None):
+        if matrixFilePath is not None:
+            if matrixFilePath in self._cache:
+                cached = self._cache[matrixFilePath]
+                self.numRows = cached.numRows
+                self.numCols = cached.numCols
+                self.data = cached.data.copy()
+            else:
+                self.load_from_file(matrixFilePath)
+                self._cache[matrixFilePath] = self
+        elif numRows is not None and numCols is not None:
+            self.numRows = numRows
+            self.numCols = numCols
+            self.data = {}
+        else:
+            raise ValueError("Either matrixFilePath or numRows and numCols must be provided.")
+
+    def load_from_file(self, matrixFilePath):
         try:
-            with open(filePath, 'r') as file:
-                lines = file.readlines()
-                self.rows = int(lines[0].split('=')[1].strip())
-                self.cols = int(lines[1].split('=')[1].strip())
-                
-                for line in lines[2:]:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if not (line.startswith('(') and line.endswith(')')):
-                        raise ValueError("Invalid format in input file")
-                    
-                    row, col, value = map(int, line[1:-1].split(','))
+            with open(matrixFilePath, 'r') as file:
+                content = file.read()
+                lines = content.splitlines()
+                self.numRows = int(lines[0].split('=')[1].strip())
+                self.numCols = int(lines[1].split('=')[1].strip())
+                self.data = {}
+                # Process all data lines in one go
+                data_lines = [line.strip() for line in lines[2:] if line.strip()]
+                for line in data_lines:
+                    row, col, value = map(int, line.strip('()').split(','))
                     self.setElement(row, col, value)
-                    
         except Exception as e:
-            raise ValueError(f"Error reading file: {str(e)}")
+            raise ValueError(f"Error loading file: {e}")
 
     def getElement(self, currRow, currCol):
-        """
-        Get the element at the specified row and column.
-        """
-        return self.matrix.get((currRow, currCol), 0)
+        return self.data.get((currRow, currCol), 0)
 
     def setElement(self, currRow, currCol, value):
-        """
-        Set the element at the specified row and column.
-        """
         if value != 0:
-            self.matrix[(currRow, currCol)] = value
-        elif (currRow, currCol) in self.matrix:
-            del self.matrix[(currRow, currCol)]
+            self.data[(currRow, currCol)] = value
+        elif (currRow, currCol) in self.data:
+            del self.data[(currRow, currCol)]
 
     def add(self, other):
-        """
-        Add two sparse matrices.
-        """
-        if self.rows != other.rows or self.cols != other.cols:
-            raise ValueError("Matrices dimensions must match for addition")
-        
-        result = SparseMatrix(numRows=self.rows, numCols=self.cols)
-        for (row, col), value in self.matrix.items():
-            result.setElement(row, col, value + other.getElement(row, col))
+        if self.numRows != other.numRows or self.numCols != other.numCols:
+            raise ValueError("Matrices dimensions do not match for addition.")
+        result = SparseMatrix(numRows=self.numRows, numCols=self.numCols)
+        for (row, col) in set(self.data.keys()).union(other.data.keys()):
+            sum_val = self.getElement(row, col) + other.getElement(row, col)
+            result.setElement(row, col, sum_val)
         return result
 
     def subtract(self, other):
-        """
-        Subtract one sparse matrix from another.
-        """
-        if self.rows != other.rows or self.cols != other.cols:
-            raise ValueError("Matrices dimensions must match for subtraction")
-        
-        result = SparseMatrix(numRows=self.rows, numCols=self.cols)
-        for (row, col), value in self.matrix.items():
-            result.setElement(row, col, value - other.getElement(row, col))
+        if self.numRows != other.numRows or self.numCols != other.numCols:
+            raise ValueError("Matrices dimensions do not match for subtraction.")
+        result = SparseMatrix(numRows=self.numRows, numCols=self.numCols)
+        for (row, col) in set(self.data.keys()).union(other.data.keys()):
+            sub_val = self.getElement(row, col) - other.getElement(row, col)
+            result.setElement(row, col, sub_val)
         return result
 
     def multiply(self, other):
-        """
-        Multiply two sparse matrices.
-        """
-        if self.cols != other.rows:
-            raise ValueError("Number of columns in first matrix must match number of rows in second matrix")
+        if self.numCols != other.numRows:
+            raise ValueError("Number of columns in the first matrix must equal the number of rows in the second matrix.")
+        result = SparseMatrix(numRows=self.numRows, numCols=other.numCols)
         
-        result = SparseMatrix(numRows=self.rows, numCols=other.cols)
-        for (i, k), val1 in self.matrix.items():
-            for j in range(other.cols):
-                val2 = other.getElement(k, j)
-                if val2 != 0:
-                    result.setElement(i, j, result.getElement(i, j) + val1 * val2)
+        # Precompute columns for each row in the second matrix
+        other_cols = {}
+        for (row, col), val in other.data.items():
+            if row not in other_cols:
+                other_cols[row] = []
+            other_cols[row].append(col)
+        
+        # Perform optimized multiplication
+        for (row_a, col_a), val_a in self.data.items():
+            if col_a in other_cols:
+                for col_b in other_cols[col_a]:
+                    val_b = other.getElement(col_a, col_b)
+                    if val_b != 0:
+                        result.setElement(row_a, col_b, result.getElement(row_a, col_b) + val_a * val_b)
         return result
-
-    def __str__(self):
-        """
-        String representation of the sparse matrix showing non-zero values.
-        """
-        result = []
-        for row in range(self.rows):
-            row_values = []
-            for col in range(self.cols):
-                value = self.getElement(row, col)
-                row_values.append(f"{value:>5}")  # Right-align values with 5 spaces
-            result.append(" ".join(row_values))
-        return "\n".join(result) + f"\n\nSparseMatrix(rows={self.rows}, cols={self.cols}, non_zero_elements={len(self.matrix)})"
