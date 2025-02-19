@@ -1,6 +1,16 @@
 class SparseMatrix:
     _cache = {}  # Class-level cache for loaded matrices
 
+    def __str__(self):
+        """Returns a formatted string representation of the matrix"""
+        output = []
+        for row in range(self.numRows):
+            row_data = []
+            for col in range(self.numCols):
+                row_data.append(str(self.getElement(row, col)))
+            output.append(" ".join(row_data))
+        return "\n".join(output)
+
     def __init__(self, matrixFilePath=None, numRows=None, numCols=None):
         if matrixFilePath is not None:
             if matrixFilePath in self._cache:
@@ -64,6 +74,7 @@ class SparseMatrix:
     def multiply(self, other):
         if self.numCols != other.numRows:
             raise ValueError("Number of columns in the first matrix must equal the number of rows in the second matrix.")
+        print()
         result = SparseMatrix(numRows=self.numRows, numCols=other.numCols)
         
         # Precompute columns for each row in the second matrix
