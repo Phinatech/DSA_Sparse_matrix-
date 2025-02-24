@@ -104,6 +104,7 @@ class SparseMatrix:
             ValueError: If row or col are out of bounds
         """
         if row < 0 or row > self.numRows or col < 0 or col > self.numCols:
+            print(self.numRows, self.numCols)
             raise ValueError(f"Position ({row}, {col}) is out of bounds")
         return self.data.get((row, col), 0)
 
@@ -182,33 +183,30 @@ class SparseMatrix:
         return self.operate(other, lambda x, y: x - y)
 
     def multiply(self, other: 'SparseMatrix') -> 'SparseMatrix':
-        """Multiply this matrix with another one.
-        
-        Args:
-            other: Another SparseMatrix to multiply with
-            
-        Returns:
-            New SparseMatrix containing the product
-            
-        Raises:
-            ValueError: If matrices have incompatible dimensions
-            TypeError: If other is not a SparseMatrix
-        """
+        """Multiply this matrix with another one."""
+
         if not isinstance(other, SparseMatrix):
             raise TypeError("Multiplication requires another SparseMatrix")
-            
+
         if self.numCols != other.numRows:
             raise ValueError(
                 f"Matrix multiplication requires first matrix cols ({self.numCols}) "
                 f"to match second matrix rows ({other.numRows})"
             )
-            
+
         result = SparseMatrix(rows=self.numRows, cols=other.numCols)
         other_transposed = other.transpose()
+
         for (r1, c1), v1 in self.data.items():
-            for c2 in other_transposed.get_row_entries(c1):
-                result.set(r1, c2, result.get(r1, c2) + v1 * other.get(c1, c2))
+            row_entries = other_transposed.get_row_entries(c1)
+            for c2 in row_entries:
+                v2 = other.get(c1, c2)
+                current_value = result.get(r1, c2)
+                result.set(r1, c2, current_value + v1 * v2)
+
         return result
+
+
 
     def transpose(self) -> 'SparseMatrix':
         """Create and return the transpose of this matrix.
